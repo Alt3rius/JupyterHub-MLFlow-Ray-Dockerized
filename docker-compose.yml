@@ -1,0 +1,137 @@
+version: '3'
+
+services:
+  # Configuration for Hub+Proxy
+  jupyterhub:
+    build: jupyterhub
+    image: jupyterhub_img
+    container_name: jupyterhub_hub
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /opt/jupyterhub/jupyterhub/config:/srv/jupyterhub
+      - /etc/shadow:/etc/shadow
+      - /etc/passwd:/etc/passwd
+      - /etc/groups:/etc/groups
+    environment:
+      DOCKER_JUPYTER_IMAGE: jupyterlab_img
+      DOCKER_NETWORK_NAME: ${COMPOSE_PROJECT_NAME}_default
+      HUB_IP: jupyterhub_hub
+    networks:
+      - default
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.jupyterhub_hub.rule=Host(`alterai.pl`) && PathPrefix(`/jupyter`)"
+      - "traefik.http.routers.jupyterhub_hub.tls=true"
+    restart: on-failure
+  
+
+  # Configuration for reverse proxy
+  reverse-proxy:
+    image: traefik:latest
+    container_name: reverse-proxy
+    command:
+     - --entrypoints.web.address=:80
+     - --entrypoints.web-secure.address=:443
+     - --providers.docker=true
+     - --providers.file.directory=/etc/traefik/config/
+     - --providers.file.watch=true
+     - --api.insecure
+    labels:
+      - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+      - "traefik.http.routers.redirs.rule=hostregexp(`{host:.+}`)"
+      - "traefik.http.routers.redirs.entrypoints=web"
+      - "traefik.http.routers.redirs.middlewares=redirect-to-https"
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8080:8080"
+    networks:
+      - default
+      - web
+    volumes:
+      - ./reverse-proxy/certificates.toml:/etc/traefik/config/certificates.toml
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/letsencrypt/live/alterai.pl/cert.pem:/etc/certs/cert.pem:ro
+      - /etc/letsencrypt/live/alterai.pl/chain.pem:/etc/certs/chain.pem:ro
+      - /etc/letsencrypt/live/alterai.pl/fullchain.pem:/etc/certs/fullchain.pem:ro
+      - /etc/letsencrypt/live/alterai.pl/privkey.pem:/etc/certs/privkey.pem:ro
+    restart: on-failure
+
+  #my-app:docker rm -f $(docker ps -a -q)
+
+    #image: containous/whoami:v1.3.0
+    #labels:
+      #- traefik.http.routers.my-app.rule=Host(`alterai.pl`)
+  # Configuration for the single-user servers
+  jupyterlab:
+    build: jupyterlab
+    image: jupyterlab_img
+    container_name: jupyterlab-throwaway
+    network_mode: none
+    command: echo
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities:
+              - gpu
+
+  mlflow:
+    build: mlflow
+    image: mlflow_service
+    container_name: mlflow_tracking
+    networks:
+      - web
+      - backend
+    expose:
+      - "5000"
+    command: mlflow server --host 0.0.0.0 --backend-store-uri postgresql+psycopg2://mlflow:mlflow@postgre:5432/mlflow --default-artifact-root file:/opt/mlflow/mlruns
+    volumes: 
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./mlflow/mlrune:/opt/mlflow/mlruns
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.mlflow_tracking.rule=Host(`alterai.pl`)"
+      - "traefik.http.routers.mlflow_tracking.tls=true"
+      - "traefik.docker.network=web"
+    restart: on-failure
+
+  postgre:
+    image: postgres
+    container_name: postgre
+    environment:
+      POSTGRES_PASSWORD: xdxd12345
+    volumes:
+      - ./mlflow-postgres:/var/lib/postgresql/data
+    labels:
+      - "traefik.enable=false"
+    networks:
+      - backend
+    restart: on-failure
+#  whoami:
+#    image: traefik/whoami
+#    container_name: simple-service
+#    volumes:
+#      - /var/run/docker.sock:/var/run/docker.sock
+
+#    labels:
+#      - "traefik.enable=true"
+#      - "traefik.http.routers.mlflow_tracking.rule=Host(`alterai.pl`) && PathPrefix(`/mlflow`)"
+#      - "traefik.http.routers.mlflow_tracking.tls=true"
+#    restart: on-failure
+
+
+  #volumes:
+
+
+networks:
+  default:
+    external: false
+    driver: bridge
+  web:
+    external: true
+  backend:
+    driver: bridge
+    external: false
+
