@@ -86,7 +86,11 @@ services:
       - backend
     expose:
       - "5000"
-    command: mlflow server --host 0.0.0.0 --backend-store-uri postgresql+psycopg2://mlflow:mlflow@postgre:5432/mlflow --default-artifact-root file:/opt/mlflow/mlruns
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: https://minio.alterai.pl/
+      AWS_ACCESS_KEY_ID: "minio_id"
+      AWS_SECRET_ACCESS_KEY: "minio_key"
+    command: mlflow server --host 0.0.0.0 --backend-store-uri postgresql+psycopg2://mlflow:mlflow@postgre:5432/mlflow --default-artifact-root s3://mlflow/
     volumes: 
       - /var/run/docker.sock:/var/run/docker.sock
       - ./mlflow/mlrune:/opt/mlflow/mlruns
@@ -109,6 +113,29 @@ services:
     networks:
       - backend
     restart: on-failure
+
+  minio:
+    image: minio/minio
+    container_name: minio
+    networks:
+      - backend
+      - default
+      - web
+    volumes:
+      - ./minio_data:/opt/minio/storage
+    expose:
+      - "9000"
+    environment:
+      MINIO_ACCESS_KEY: "minio_id"
+      MINIO_SECRET_KEY: "minio_key"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.minio.rule=Host(`minio.alterai.pl`)"
+      - "traefik.http.routers.minio.tls=true"
+      - "traefik.docker.network=web"
+
+    command: server /opt/minio/storage
+    
 #  whoami:
 #    image: traefik/whoami
 #    container_name: simple-service
