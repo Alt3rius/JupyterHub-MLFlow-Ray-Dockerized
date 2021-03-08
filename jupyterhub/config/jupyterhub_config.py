@@ -131,7 +131,7 @@ import os
 #  
 #  This is the address on which the proxy will bind. Sets protocol, ip, base_url
 #  Default: 'http://:8000'
-c.JupyterHub.bind_url = 'http://:8000/jupyter'
+# c.JupyterHub.bind_url = 'http://:8000/jupyter'
 
 ## Whether to shutdown the proxy when the Hub shuts down.
 #  

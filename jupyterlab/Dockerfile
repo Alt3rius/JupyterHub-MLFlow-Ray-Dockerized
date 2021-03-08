@@ -306,7 +306,7 @@ RUN mamba install --yes -c pytorch \
 
 RUN mamba install --yes -c conda-forge pytorch-lightning=1.1.* \
     sentencepiece=0.1.* \
-    mlflow=1.13.* \
+    mlflow=1.14.* \
     boto3=1.17.* \
     && conda clean --all -f -y
 

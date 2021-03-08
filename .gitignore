@@ -1,2 +1,5 @@
 minio_data
 mlflow-postgres
+authelia
+redis
+docker-compose.yml.bak

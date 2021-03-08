@@ -21,9 +21,9 @@ services:
       - web
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.jupyterhub_hub.rule=Host(`alterai.pl`) && PathPrefix(`/jupyter`)"
+      - "traefik.http.routers.jupyterhub_hub.rule=Host(`hub.alterai.pl`)"
       - "traefik.http.routers.jupyterhub_hub.tls=true"
-    restart: on-failure
+    restart: unless-stopped
   
 
   # Configuration for reverse proxy
@@ -31,21 +31,27 @@ services:
     image: traefik:latest
     container_name: reverse-proxy
     command:
+     - --api
      - --entrypoints.web.address=:80
      - --entrypoints.web-secure.address=:443
      - --providers.docker=true
      - --providers.file.directory=/etc/traefik/config/
      - --providers.file.watch=true
-     - --api.insecure
     labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.entrypoints.rule=Host(`traefik.alterai.pl`)"
+      - "traefik.http.routers.api.tls=true"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
       - "traefik.http.routers.redirs.rule=hostregexp(`{host:.+}`)"
       - "traefik.http.routers.redirs.entrypoints=web"
       - "traefik.http.routers.redirs.middlewares=redirect-to-https"
+      - "traefik.http.routers.api.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=alt3rius:$$apr1$$O95b9pMM$$TVJzo3NQOdxtXm1cZ8OrN1"
     ports:
       - "80:80"
       - "443:443"
-      - "8080:8080"
+    expose:
+      - "8080"
     networks:
       - default
       - web
@@ -56,7 +62,8 @@ services:
       - /etc/letsencrypt/live/alterai.pl/chain.pem:/etc/certs/chain.pem:ro
       - /etc/letsencrypt/live/alterai.pl/fullchain.pem:/etc/certs/fullchain.pem:ro
       - /etc/letsencrypt/live/alterai.pl/privkey.pem:/etc/certs/privkey.pem:ro
-    restart: on-failure
+    restart: unless-stopped
+
 
   #my-app:docker rm -f $(docker ps -a -q)
 
@@ -92,14 +99,16 @@ services:
       AWS_SECRET_ACCESS_KEY: "minio_key"
     command: mlflow server --host 0.0.0.0 --backend-store-uri postgresql+psycopg2://mlflow:mlflow@postgre:5432/mlflow --default-artifact-root s3://mlflow/
     volumes: 
-      - /var/run/docker.sock:/var/run/docker.sock
+#      - /var/run/docker.sock:/var/run/docker.sock
       - ./mlflow/mlrune:/opt/mlflow/mlruns
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.mlflow_tracking.rule=Host(`alterai.pl`)"
       - "traefik.http.routers.mlflow_tracking.tls=true"
       - "traefik.docker.network=web"
-    restart: on-failure
+      - "traefik.http.routers.mlflow_tracking.middlewares=auth"
+      - "traefik.http.middlewares.auth.basicauth.users=alt3rius:$$apr1$$O95b9pMM$$TVJzo3NQOdxtXm1cZ8OrN1"
+    restart: unless-stopped
 
   postgre:
     image: postgres
@@ -112,7 +121,7 @@ services:
       - "traefik.enable=false"
     networks:
       - backend
-    restart: on-failure
+    restart: unless-stopped
 
   minio:
     image: minio/minio
@@ -135,6 +144,7 @@ services:
       - "traefik.docker.network=web"
 
     command: server /opt/minio/storage
+    restart: unless-stopped
     
 #  whoami:
 #    image: traefik/whoami
@@ -161,4 +171,3 @@ networks:
   backend:
     driver: bridge
     external: false
-
